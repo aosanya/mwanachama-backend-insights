@@ -1,0 +1,73 @@
+# CLAUDE.md
+
+Guidance for Claude Code working in this repository.
+
+## Project: mwanachama-backend-insights
+
+Records session insights — a short summary of a working session plus any
+repetitive tasks/friction ("challenges") and shortcut/tooling ideas
+("suggestions") it surfaced, so a later pass can mine them for real
+product/tooling work instead of the friction just recurring silently every
+session. Module path `github.com/aosanya/mwanachama-backend-insights`.
+Sibling of [mwanachama-backend-assetmanager](../mwanachama-backend-assetmanager)
+in spirit (same GORM-direct, no-HTTP-of-its-own shape), scaled down to one
+entity.
+
+**Standalone library, no server of its own.** `InsightManager` is
+append-only — `CreateInsight`/`GetInsight`/`ListInsights` only, no
+Update/Delete, the same as `mwanachama-backend-assetmanager`'s Movement
+ledger. `models/` holds the domain type, `gormstore/` holds the row struct
+and migration — same split as every other GORM-backed repo in this family.
+
+**MCP tools live here, not in the mounting host** — `mcp/` exposes
+`insight_create`/`insight_list`, following `mwanachama-backend-agency/mcp`'s
+shape (the org's reference implementation for "a library's own manager
+methods as MCP tools", see `mwanachama-backend-actor/CLAUDE.md`'s "MCP
+tools" section). One deliberate simplification vs. agency's `mcp` package:
+no `ManagerResolver` indirection. Agency needs that because
+`mwanachama-wakala-api` mounts *many* Agencies behind one server; this
+repo has exactly one fixed Insights instance for the whole deployment, so
+`mcp.RegisterTools` takes a concrete `InsightManager` directly.
+
+**Hosted on `mwanachama-wakala-api`, not `mwanachama-backend-api-gateway`.**
+The gateway's `/mcp` (`git_*`/`taskmanager_*`) is deliberately read-only by
+its own doc-comment convention; `insight_create` is a write, so this repo
+rides wakala-api's endpoint instead — it already has write-tool precedent
+(`agency_*`) and is already running and registered in the workspace
+`.mcp.json`. See wakala-api's own `CLAUDE.md` for the wiring: one `go.mod`
+dependency, one `InsightManager` constructed alongside its existing DB
+setup, one field on `Deps`, one `RegisterTools` call, one migration
+mirror. That wiring is deliberately thin — "most of the code should be in
+the insight repo itself" was an explicit instruction, mirroring AG13's
+same rationale for moving agency's MCP tools out of wakala-api.
+
+**No `routes/` REST package.** Nothing has asked for one — MCP is the only
+surface this repo needs today. Can be added later without a redesign, the
+same way `mwanachama-backend-assetmanager` added `routes/` after the fact.
+
+**Verification default**: `go test ./...` (sqlite-backed via
+`glebarez/sqlite`) is the expected way to verify a change here — no
+Postgres container needed for this repo's own tests. See
+[[feedback_use_memory_backend_for_tests]].
+
+## Open questions
+
+None open — see
+[documentation/1. requirements/requirements.md](documentation/1.%20requirements/requirements.md)'s
+decision table. One deliberate follow-up, not an open design question:
+actually wiring something (a Stop hook, a slash command) so a session
+calls `insight_create` automatically at the end — not built yet, on
+purpose, so the tool can be exercised manually first.
+
+## Conventions
+
+- Four-phase `documentation/` layout — see
+  [documentation/README.md](documentation/README.md).
+- Before adding new persistence code, read
+  `mwanachama-backend-assetmanager`'s `gormstore/` package and
+  `asset_manager.go`'s `AssetManager` interface as the reference shape
+  this repo's GORM layer was ported from.
+- Before touching `mcp/`, read `mwanachama-backend-agency/mcp/mcp.go`'s
+  doc comment and `mwanachama-backend-actor/CLAUDE.md`'s "MCP tools"
+  section — this repo follows that standard minus the `ManagerResolver`
+  indirection (see above for why it doesn't need one).

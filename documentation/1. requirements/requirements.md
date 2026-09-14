@@ -25,9 +25,31 @@ database, so a later pass can mine it for actual product/tooling work.
 | 10 | Multi-instance / `ManagerResolver` indirection | Not needed. Agency's `mcp/` package takes a `ManagerResolver` because `mwanachama-wakala-api` mounts many Agencies behind one server; Insights has exactly one fixed instance for the whole wakala-api deployment, so its `mcp/` tools close over a concrete `InsightManager` directly. |
 | 11 | REST `routes/` surface | Not built. Nothing asked for one — MCP is the only surface this repo needs today. Can be added later the same way `mwanachama-backend-assetmanager` added `routes/` after the fact, without a redesign. |
 
+## Scope decisions (session of 2026-09-14, user-posted insights)
+
+`mwanachama-wakala-studio`'s agency-chat screen needed a way for a human
+operator to discuss with the agent and then explicitly capture an insight
+about the agency being designed — distinct from any *automatic* insight
+the agent itself might record. This required extending the repo's
+original Claude-Code-session-shaped model to also serve that product use
+case.
+
+| # | Question | Decision |
+| - | -------- | -------- |
+| 12 | How to tell a user-captured insight from an agent-captured one | New `Source` field (`SourceAuto`/`SourceUser` in `models`), empty on create defaults to `SourceAuto` — the existing `insight_create` MCP tool needed zero code changes to keep landing as `"auto"`. |
+| 13 | How to scope an insight to a wakala Agency/Draft | New optional `AgencyID` (indexed, mirrors `Repo`'s existing index) and `DraftID` fields — both empty for a dev-session insight, both populated for a wakala-chat insight. |
+| 14 | How to capture insight content beyond Summary | A lightweight `Tags` field, comma-separated free text — same plain-string convention as `mwanachama-backend-assetmanager`'s `Asset.AttributesJSON` (decision #8's precedent, extended). No fixed category enum — nothing today needs filtering by a closed set of categories. |
+| 15 | How to avoid a user's follow-up remark duplicating an insight already on record | New `InsightNote` type — an append-only follow-up attached to an existing Insight (`CreateInsightNote`/`ListInsightNotes`, same `InsightManager` interface, not a separate manager). Considered a self-referencing `RelatedInsightID` on Insight instead; rejected because every follow-up would still be a full new Insight row repeating a Summary, even for a one-line addition — a Note never touches the parent's Summary/Tags. |
+| 16 | REST surface | Built — `routes/` package (superseding decision #11's "not built"), mirroring `mwanachama-backend-assetmanager/routes`'s shape: `InsightRoutes`/`InsightNoteRoutes`/`Routes`, mounted by `mwanachama-wakala-api` at `/insights` and `/insights/{insightID}/notes`, `requireCaller`-gated there. `mcp/` is unchanged — this surface is for a human caller, not an AI agent. |
+
 ## Open questions
 
-None. The one deferred item — actually wiring a Stop hook or slash command
-so a session calls `insight_create` automatically — is explicitly a
-follow-up once the tool exists and can be tested manually first, not an
-open design question about this repo's own shape.
+None. Two deliberate follow-ups, not open design questions about this
+repo's own shape:
+
+- Wiring a Stop hook or slash command so a Claude Code session calls
+  `insight_create` automatically — unchanged from the original scope.
+- Wiring the wakala agent side of "automatic insights" (the agent itself
+  calling `insight_create`/a future `insight_note_create` mid-conversation)
+  — deferred until the human-facing path above is proven; no MCP tool
+  changes were made in this pass.

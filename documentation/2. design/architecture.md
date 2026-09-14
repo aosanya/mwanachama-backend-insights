@@ -2,39 +2,64 @@
 
 ## Schema
 
-One table, one type:
+Two tables, two types — `InsightNote` (added 2026-09-14) is how an insight
+grows over time without duplicating itself:
 
 ```
 Insight
   id           string, primary key
   repo         string, indexed, optional
+  agency_id    string, indexed, optional
+  draft_id     string, optional
+  source       string, "auto" or "user"
   summary      string, required
+  tags         string, optional (comma-separated free text)
   challenges   string, optional (free text)
   suggestions  string, optional (free text)
   created_at   string (RFC3339)
+
+InsightNote
+  id           string, primary key
+  insight_id   string, indexed, required (references Insight.id)
+  source       string, "auto" or "user"
+  text         string, required
+  created_at   string (RFC3339)
 ```
 
-No `updated_at`, no soft-delete column — an Insight is append-only, the
-same reasoning as `mwanachama-backend-assetmanager`'s `MovementRow`.
+No `updated_at`, no soft-delete column on either — both are append-only,
+the same reasoning as `mwanachama-backend-assetmanager`'s `MovementRow`.
+`repo`/`challenges`/`suggestions` are the original Claude-Code-session
+shape; `agency_id`/`draft_id` scope a wakala-chat insight instead — a row
+uses one set or the other, never both.
 
 ## Package layout
 
 ```
-models/insight.go       — the Insight domain type
+models/insight.go       — the Insight domain type, Source constants
+models/insightnote.go   — the InsightNote domain type
 gormstore/insight.go    — InsightRow, ToRow/FromRow, BeforeCreate UUID mint
-gormstore/tables.go     — TableNames/DefaultTableNames/Migrate
+gormstore/insightnote.go — InsightNoteRow, same shape
+gormstore/tables.go     — TableNames/DefaultTableNames/Migrate (both tables)
 doc.go, tables.go       — root-package wrappers over gormstore
-errors.go               — ErrInsightNotFound, ErrInvalidInsight
+errors.go               — ErrInsightNotFound, ErrInvalidInsight, ErrInvalidInsightNote
 insight.go              — InsightManager interface + insightManager impl
+insightnote.go          — CreateInsightNote/ListInsightNotes methods
 mcp/mcp.go              — RegisterTools, ListResult[T], summary()
 mcp/insight.go          — insight_create, insight_list tool registrations
+routes/                 — plain REST surface for a human caller (added
+                           2026-09-14): doc.go, wire.go, routes.go
+                           (Route/Route.Pattern/InsightRoutes/
+                           InsightNoteRoutes/Routes), insight.go,
+                           insightnote.go
 ```
 
 Same split as `mwanachama-backend-assetmanager` and
 `mwanachama-backend-agency`: domain types and GORM plumbing each live in
-their own subpackage, the root package exposes one manager interface, and
-`mcp/` is the only network-facing surface — no `routes/` package exists
-yet because nothing needs a plain REST path today.
+their own subpackage, the root package exposes one manager interface.
+Two network-facing surfaces now exist side by side: `mcp/` for an AI
+agent, `routes/` for a human caller (`mwanachama-wakala-studio`) — neither
+depends on the other, and `InsightNote` has no MCP tools yet (deliberately
+deferred, see requirements.md's 2026-09-14 decisions).
 
 ## How this reaches a live MCP client
 

@@ -41,9 +41,30 @@ mirror. That wiring is deliberately thin — "most of the code should be in
 the insight repo itself" was an explicit instruction, mirroring AG13's
 same rationale for moving agency's MCP tools out of wakala-api.
 
-**No `routes/` REST package.** Nothing has asked for one — MCP is the only
-surface this repo needs today. Can be added later without a redesign, the
-same way `mwanachama-backend-assetmanager` added `routes/` after the fact.
+**`routes/` REST package added 2026-09-14** — a human-facing surface
+(`mwanachama-wakala-studio`'s agency-chat screen) needed to create/read
+insights directly, not through an AI agent's MCP call. Mirrors
+`mwanachama-backend-assetmanager/routes`'s shape exactly: `Route`/
+`Route.Pattern`, `InsightRoutes`/`InsightNoteRoutes`/`Routes`, decode-call-
+encode handlers, no caller-identity gate of its own (the mounting process —
+`mwanachama-wakala-api`'s `requireCaller` — wraps every route). `mcp/` is
+unchanged and remains the AI-agent surface.
+
+**`InsightNote` (added 2026-09-14)** answers "how does an insight grow
+without duplicating itself": a follow-up remark on an insight already on
+record (auto- or user-captured) is appended as a Note on that same row —
+`CreateInsightNote`/`ListInsightNotes`, on the same `InsightManager`
+interface (Note is subordinate to Insight, the same way `AssetManager`
+carries Movement's methods directly rather than a separate manager) —
+instead of spawning a near-duplicate Insight that repeats its Summary.
+`Insight` also gained `AgencyID`/`DraftID` (which wakala Agency/Draft an
+insight concerns, both empty for a dev-session insight) and `Source`
+(`SourceAuto`/`SourceUser`; empty on create defaults to `SourceAuto`, so
+the existing `insight_create` MCP tool needed zero changes) and `Tags`
+(comma-separated free text, same plain-string convention as
+`Asset.AttributesJSON`). See
+[documentation/1. requirements/requirements.md](documentation/1.%20requirements/requirements.md)'s
+2026-09-14 decision block for the full record.
 
 **Verification default**: `go test ./...` (sqlite-backed via
 `glebarez/sqlite`) is the expected way to verify a change here — no

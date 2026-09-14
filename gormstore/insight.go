@@ -13,7 +13,11 @@ import (
 type InsightRow struct {
 	ID          string `gorm:"primaryKey"`
 	Repo        string `gorm:"index"`
+	AgencyID    string `gorm:"index"`
+	DraftID     string
+	Source      string
 	Summary     string
+	Tags        string
 	Challenges  string
 	Suggestions string
 	CreatedAt   string
@@ -31,7 +35,11 @@ func InsightToRow(in models.Insight) InsightRow {
 	return InsightRow{
 		ID:          in.ID,
 		Repo:        in.Repo,
+		AgencyID:    in.AgencyID,
+		DraftID:     in.DraftID,
+		Source:      in.Source,
 		Summary:     in.Summary,
+		Tags:        in.Tags,
 		Challenges:  in.Challenges,
 		Suggestions: in.Suggestions,
 		CreatedAt:   in.CreatedAt,
@@ -43,7 +51,11 @@ func InsightFromRow(r InsightRow) models.Insight {
 	return models.Insight{
 		ID:          r.ID,
 		Repo:        r.Repo,
+		AgencyID:    r.AgencyID,
+		DraftID:     r.DraftID,
+		Source:      r.Source,
 		Summary:     r.Summary,
+		Tags:        r.Tags,
 		Challenges:  r.Challenges,
 		Suggestions: r.Suggestions,
 		CreatedAt:   r.CreatedAt,

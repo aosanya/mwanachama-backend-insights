@@ -23,19 +23,28 @@ type Insight = models.Insight
 type InsightFilter struct {
 	// Repo restricts results to insights recorded for this exact repo.
 	Repo string
+	// AgencyID restricts results to insights recorded for this exact
+	// wakala Agency.
+	AgencyID string
 }
 
-// InsightManager is the primary interface for recording and reading session
-// insights. This is a single-tenant package — one deployment serves one
-// owner, so no method takes a tenant-scoping argument, mirroring
-// mwanachama-backend-assetmanager.AssetManager's shape. Append-only: there
-// is no Update or Delete.
+// InsightManager is the primary interface for recording and reading
+// insights and their notes. This is a single-tenant package — one
+// deployment serves one owner, so no method takes a tenant-scoping
+// argument, mirroring mwanachama-backend-assetmanager.AssetManager's
+// shape. Append-only: there is no Update or Delete, for either Insight or
+// InsightNote. InsightNote's methods live on this same interface rather
+// than a separate manager — it is subordinate to Insight the same way
+// AssetManager carries Movement's methods directly.
 //
 // Implementations must be safe for concurrent use.
 type InsightManager interface {
 	CreateInsight(ctx context.Context, in models.Insight) (models.Insight, error)
 	GetInsight(ctx context.Context, insightID string) (models.Insight, error)
 	ListInsights(ctx context.Context, filter InsightFilter) ([]models.Insight, error)
+
+	CreateInsightNote(ctx context.Context, in models.InsightNote) (models.InsightNote, error)
+	ListInsightNotes(ctx context.Context, insightID string) ([]models.InsightNote, error)
 }
 
 // insightManager is the GORM-backed implementation of [InsightManager].
@@ -56,10 +65,18 @@ func NewInsightManager(db *gorm.DB, t TableNames) (InsightManager, error) {
 }
 
 // CreateInsight validates and appends a new Insight record. Summary is the
-// only required field.
+// only required field. Source defaults to models.SourceAuto when empty,
+// so the existing insight_create MCP tool (which never sets it) keeps
+// working unchanged.
 func (m *insightManager) CreateInsight(ctx context.Context, in models.Insight) (models.Insight, error) {
 	if in.Summary == "" {
 		return models.Insight{}, fmt.Errorf("%w: Summary is required", ErrInvalidInsight)
+	}
+	if in.Source == "" {
+		in.Source = models.SourceAuto
+	}
+	if in.Source != models.SourceAuto && in.Source != models.SourceUser {
+		return models.Insight{}, fmt.Errorf("%w: Source must be %q or %q", ErrInvalidInsight, models.SourceAuto, models.SourceUser)
 	}
 	in.ID = ""
 	in.CreatedAt = time.Now().UTC().Format(time.RFC3339)
@@ -89,6 +106,9 @@ func (m *insightManager) ListInsights(ctx context.Context, filter InsightFilter)
 	q := m.db.WithContext(ctx).Table(m.tables.Insights)
 	if filter.Repo != "" {
 		q = q.Where("repo = ?", filter.Repo)
+	}
+	if filter.AgencyID != "" {
+		q = q.Where("agency_id = ?", filter.AgencyID)
 	}
 
 	var rows []gormstore.InsightRow

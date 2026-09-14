@@ -1,10 +1,16 @@
 package models
 
-// Insight is a record of one working session's friction and suggestions —
-// repetitive tasks, challenges hit, or shortcuts/tooling worth building —
-// surfaced as a short write-up at (or near) the end of the session.
+// Source values for Insight.Source and InsightNote.Source.
+const (
+	SourceAuto = "auto"
+	SourceUser = "user"
+)
+
+// Insight is a record of a working session's or a wakala Agency chat's
+// friction, suggestions, or observations, surfaced as a short write-up.
 // Append-only: there is no update or delete, the same as
-// mwanachama-backend-assetmanager's Movement ledger.
+// mwanachama-backend-assetmanager's Movement ledger. Notes (see
+// [InsightNote]) are how it grows over time without duplicating Summary.
 type Insight struct {
 	// ID is the unique identifier for this insight. Set by the backend on
 	// creation; callers should leave it empty in create requests.
@@ -15,8 +21,26 @@ type Insight struct {
 	// to one repo.
 	Repo string `json:"repo,omitempty"`
 
-	// Summary is a short account of what happened in the session.
+	// AgencyID is which mwanachama-wakala Agency this insight concerns, if
+	// any. Empty for a dev-session insight recorded via MCP.
+	AgencyID string `json:"agency_id,omitempty"`
+
+	// DraftID is which Draft of AgencyID was open when this insight was
+	// captured, if any.
+	DraftID string `json:"draft_id,omitempty"`
+
+	// Source is SourceAuto or SourceUser — whether this insight was
+	// recorded by an AI agent or explicitly entered by a person. Empty on
+	// create defaults to SourceAuto.
+	Source string `json:"source,omitempty"`
+
+	// Summary is a short account of what happened or was observed.
 	Summary string `json:"summary"`
+
+	// Tags is optional, comma-separated free text (e.g. "risk, decision"),
+	// not a JSON-encoded array — same plain-string convention as
+	// mwanachama-backend-assetmanager's Asset.AttributesJSON.
+	Tags string `json:"tags,omitempty"`
 
 	// Challenges is free text describing repetitive tasks or friction
 	// points observed during the session.

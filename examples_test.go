@@ -114,3 +114,23 @@ func TestTableNamesAreDerivedNotLiteral(t *testing.T) {
 		t.Fatalf("RawNameFor = %q, want %q", got, want)
 	}
 }
+
+func TestSpecForCarriesTheDeclaredFields(t *testing.T) {
+	s, err := mwanachamainsights.SpecFor("app")
+	if err != nil {
+		t.Fatalf("SpecFor: %v", err)
+	}
+	if s.Instance != "app" {
+		t.Fatalf("Instance = %q, want %q", s.Instance, "app")
+	}
+	o, ok := s.ByRole(mwanachamainsights.RoleInsight)
+	if !ok {
+		t.Fatal("no object fills the insight role")
+	}
+	if len(o.Fields) == 0 {
+		t.Fatal("the insight role arrived with no fields — SpecFor must go through the blueprint, not spec.Parse")
+	}
+	if o.Table != "insights" {
+		t.Fatalf("Table = %q, want %q — the legacy adoption derives app_insights from this", o.Table, "insights")
+	}
+}

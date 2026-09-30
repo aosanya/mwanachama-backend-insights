@@ -4,32 +4,26 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
-	"net/http/httptest"
-	"strings"
 	"testing"
 
 	mwanachamainsights "github.com/aosanya/mwanachama-backend-insights"
-	"github.com/aosanya/mwanachama-backend-insights/routes"
 )
 
 func TestCreateInsightNote(t *testing.T) {
-	im := newTestManager(t)
+	srv, im := newTestServer(t)
 	insight, err := im.CreateInsight(context.Background(), mwanachamainsights.Insight{Summary: "Original observation."})
 	if err != nil {
 		t.Fatalf("seed CreateInsight: %v", err)
 	}
-	handler := routes.CreateInsightNote(im)
 
 	body := `{"source":"user","text":"Following up after another discussion."}`
-	req := withPathValue(httptest.NewRequest(http.MethodPost, "/insights/"+insight.ID+"/notes", strings.NewReader(body)), "insightID", insight.ID)
-	rec := httptest.NewRecorder()
-	handler(rec, req)
+	res, raw := do(t, http.MethodPost, srv.URL+"/insights/"+insight.ID+"/notes", body)
 
-	if rec.Code != http.StatusCreated {
-		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
+	if res.StatusCode != http.StatusCreated {
+		t.Fatalf("status = %d, body = %s", res.StatusCode, raw)
 	}
 	var out mwanachamainsights.InsightNote
-	if err := json.Unmarshal(rec.Body.Bytes(), &out); err != nil {
+	if err := json.Unmarshal([]byte(raw), &out); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
 	if out.ID == "" || out.InsightID != insight.ID || out.Text == "" {
@@ -38,20 +32,17 @@ func TestCreateInsightNote(t *testing.T) {
 }
 
 func TestCreateInsightNote_InsightNotFound(t *testing.T) {
-	im := newTestManager(t)
-	handler := routes.CreateInsightNote(im)
+	srv, _ := newTestServer(t)
 
-	req := withPathValue(httptest.NewRequest(http.MethodPost, "/insights/nope/notes", strings.NewReader(`{"text":"hi"}`)), "insightID", "nope")
-	rec := httptest.NewRecorder()
-	handler(rec, req)
+	res, raw := do(t, http.MethodPost, srv.URL+"/insights/nope/notes", `{"text":"hi"}`)
 
-	if rec.Code != http.StatusNotFound {
-		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
+	if res.StatusCode != http.StatusNotFound {
+		t.Fatalf("status = %d, body = %s", res.StatusCode, raw)
 	}
 }
 
 func TestListInsightNotes(t *testing.T) {
-	im := newTestManager(t)
+	srv, im := newTestServer(t)
 	insight, err := im.CreateInsight(context.Background(), mwanachamainsights.Insight{Summary: "Original observation."})
 	if err != nil {
 		t.Fatalf("seed CreateInsight: %v", err)
@@ -59,17 +50,16 @@ func TestListInsightNotes(t *testing.T) {
 	if _, err := im.CreateInsightNote(context.Background(), mwanachamainsights.InsightNote{InsightID: insight.ID, Text: "note one"}); err != nil {
 		t.Fatalf("seed CreateInsightNote: %v", err)
 	}
-	handler := routes.ListInsightNotes(im)
 
-	req := withPathValue(httptest.NewRequest(http.MethodGet, "/insights/"+insight.ID+"/notes", nil), "insightID", insight.ID)
-	rec := httptest.NewRecorder()
-	handler(rec, req)
+	res, raw := do(t, http.MethodGet, srv.URL+"/insights/"+insight.ID+"/notes", "")
 
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", res.StatusCode, raw)
 	}
 	var out []mwanachamainsights.InsightNote
-	_ = json.Unmarshal(rec.Body.Bytes(), &out)
+	if err := json.Unmarshal([]byte(raw), &out); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
 	if len(out) != 1 || out[0].Text != "note one" {
 		t.Fatalf("expected 1 note, got %+v", out)
 	}

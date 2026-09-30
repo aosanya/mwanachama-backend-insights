@@ -1,0 +1,26 @@
+{
+  "module": "insights",
+  "domain": "clinic",
+  "instance": "stmarys",
+  "objects": [
+    {
+      "role": "insight",
+      "name": "observation",
+      "table": "observations",
+      "description": "Something a shift noticed about how the work went — a step that keeps being repeated, a form that keeps being filled in twice, a hand-off that keeps being missed.",
+      "indexes": [
+        {
+          "name": "ward",
+          "description": "Listing what one ward has reported, which is the clinic's own vocabulary and no concern of the module's.",
+          "fields": ["repo"]
+        }
+      ]
+    },
+    {
+      "role": "note",
+      "name": "followup",
+      "table": "followups",
+      "description": "A later remark on one observation — another shift confirming it, or reporting it happened again."
+    }
+  ]
+}

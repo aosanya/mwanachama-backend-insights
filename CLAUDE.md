@@ -4,30 +4,65 @@ Guidance for Claude Code working in this repository.
 
 ## Project: mwanachama-backend-insights
 
-Records session insights — a short summary of a working session plus any
-repetitive tasks/friction ("challenges") and shortcut/tooling ideas
-("suggestions") it surfaced, so a later pass can mine them for real
-product/tooling work instead of the friction just recurring silently every
-session. Module path `github.com/aosanya/mwanachama-backend-insights`.
-Sibling of [mwanachama-backend-assetmanager](../mwanachama-backend-assetmanager)
-in spirit (same GORM-direct, no-HTTP-of-its-own shape), scaled down to one
-entity.
+Records insights — a short summary of a stretch of work plus any repetitive
+tasks/friction ("challenges") and shortcut/tooling ideas ("suggestions") it
+surfaced, so a later pass can mine them for real product/tooling work
+instead of the friction just recurring silently every session. Module path
+`github.com/aosanya/mwanachama-backend-insights`.
+
+**A declared domain since 2026-09-30 (I9).** The objects come from
+`insights.blueprint.json` and the route table from
+`insights.operations.json`; storage is
+`mwanachama-backend-shared/specstore` and the routes are built by
+`mwanachama-backend-shared/dispatch`. There are no row structs and no
+`AutoMigrate`. This is the same shape `mwanachama-backend-catalog`,
+`-agency`, `-permissions`, `-actor`, `-forms`, `-taskmanager` and
+`-accounting` took; catalog is the reference and
+`developer/documentation/2. design/architecture-spec-driven-modules.md` is
+the strategy.
 
 **Standalone library, no server of its own.** `InsightManager` is
-append-only — `CreateInsight`/`GetInsight`/`ListInsights` only, no
-Update/Delete, the same as `mwanachama-backend-assetmanager`'s Movement
-ledger. `models/` holds the domain type, `gormstore/` holds the row struct
-and migration — same split as every other GORM-backed repo in this family.
+append-only — no Update, no Delete, for either object. The way an insight
+grows is a note beside it, never an edit.
 
-**MCP tools live here, not in the mounting host** — `mcp/` exposes
-`insight_create`/`insight_list`, following `mwanachama-backend-agency/mcp`'s
-shape (the org's reference implementation for "a library's own manager
-methods as MCP tools", see `mwanachama-backend-actor/CLAUDE.md`'s "MCP
-tools" section). One deliberate simplification vs. agency's `mcp` package:
-no `ManagerResolver` indirection. Agency needs that because
-`mwanachama-wakala-api` mounts *many* Agencies behind one server; this
-repo has exactly one fixed Insights instance for the whole deployment, so
-`mcp.RegisterTools` takes a concrete `InsightManager` directly.
+## The rule that matters most: this module names no domain
+
+**A word that means something in one domain and nothing in another does not
+belong in this module.** It records that an observation was made; what the
+observation is *about* belongs to whoever mounted it.
+
+Two fields failed that test on 2026-09-30 and were renamed, wire included:
+
+| Was | Why it failed | Is |
+| --- | ------------- | -- |
+| `Insight.AgencyID` / `agency_id` | a wakala word | `SubjectID` / `subject_id` |
+| `Insight.DraftID` / `draft_id` | same | `ContextID` / `context_id` |
+
+**`Repo` is the one documented exception.** A clinic has no repos, so it
+fails the rule — but `repo` is a published argument of the live
+`insight_create` tool, and a production tool's argument names may not change
+across a conversion. It is deliberately absent from
+`domain_agnostic_test.go`'s word list and described neutrally in the
+blueprint. See requirements decision #19; do not "fix" it without reading
+that.
+
+`domain_agnostic_test.go` enforces the rest, over identifiers in `models/`,
+`routes/`, `mcp/` and the root package, plus a second test over every
+declared field, index and **stored enum value** — a stored enum value
+outlives a rename, which is the worst version of this failure.
+
+**MCP and REST are one table.** `mcp/mcp.go` registers what
+`dispatch.Tools` builds from `insights.operations.json`, so an address
+cannot reach one surface and miss the other. That had already happened:
+`insight_note_create`/`insight_note_list` existed as REST handlers from
+2026-09-14 and were still missing from `mcp/` when the conversion started.
+
+**The published tool names are frozen.** `insight_create` and
+`insight_list` are in the workspace `.mcp.json`. `dispatch` would have
+derived `insights_insight_create` from the action id, so both operations
+declare an explicit `tool` field. `mcp/insight_test.go` calls them by name
+through a real MCP client, so a rename fails the suite rather than the
+deployment. See [documentation/2. design/routes.md](documentation/2.%20design/routes.md).
 
 **Hosted on `mwanachama-wakala-api`, not `mwanachama-backend-api-gateway`.**
 The gateway's `/mcp` (`git_*`/`taskmanager_*`) is deliberately read-only by
@@ -43,22 +78,21 @@ same rationale for moving agency's MCP tools out of wakala-api.
 
 **`routes/` REST package added 2026-09-14** — a human-facing surface
 (`mwanachama-wakala-studio`'s agency-chat screen) needed to create/read
-insights directly, not through an AI agent's MCP call. Mirrors
-`mwanachama-backend-assetmanager/routes`'s shape exactly: `Route`/
-`Route.Pattern`, `InsightRoutes`/`InsightNoteRoutes`/`Routes`, decode-call-
-encode handlers, no caller-identity gate of its own (the mounting process —
-`mwanachama-wakala-api`'s `requireCaller` — wraps every route). `mcp/` is
-unchanged and remains the AI-agent surface.
+insights directly, not through an AI agent's MCP call. It has no
+caller-identity gate of its own: the mounting process
+(`mwanachama-wakala-api`'s `requireCaller`, plus its own
+`scopeInsightsToMembership`) wraps every route.
 
 **`InsightNote` (added 2026-09-14)** answers "how does an insight grow
 without duplicating itself": a follow-up remark on an insight already on
 record (auto- or user-captured) is appended as a Note on that same row —
 `CreateInsightNote`/`ListInsightNotes`, on the same `InsightManager`
-interface (Note is subordinate to Insight, the same way `AssetManager`
-carries Movement's methods directly rather than a separate manager) —
+interface (Note is subordinate to Insight, so it needs no manager of its
+own) —
 instead of spawning a near-duplicate Insight that repeats its Summary.
-`Insight` also gained `AgencyID`/`DraftID` (which wakala Agency/Draft an
-insight concerns, both empty for a dev-session insight) and `Source`
+`Insight` also gained `SubjectID`/`ContextID` (renamed from
+`AgencyID`/`DraftID` in I9 — which subject and revision an insight concerns,
+both empty for an observation about the work itself) and `Source`
 (`SourceAuto`/`SourceUser`; empty on create defaults to `SourceAuto`, so
 the existing `insight_create` MCP tool needed zero changes) and `Tags`
 (comma-separated free text, same plain-string convention as
@@ -80,18 +114,52 @@ actually wiring something (a Stop hook, a slash command) so a session
 calls `insight_create` automatically at the end — not built yet, on
 purpose, so the tool can be exercised manually first.
 
+## What is superseded
+
+All of it on 2026-09-30, by I9:
+
+- **`gormstore/`** — `InsightRow`, `InsightNoteRow`, the four
+  `*ToRow`/`*FromRow` converters, the `BeforeCreate` id hooks and
+  `Migrate`'s `AutoMigrate` calls. `spec.Migrate` and `specstore`'s codec
+  replace them, and root `tables.go` with its
+  `TableNames`/`DefaultTableNames`/`Migrate` re-exports went with it.
+  `NewInsightManager(db, *spec.Spec)` is the constructor now.
+- **`routes/insight.go`, `routes/insightnote.go`, `routes/wire.go`,
+  `routes/doc.go`** — five decode-call-encode handlers, `insightStatusFor`,
+  `writeInsightErr`, the private `createInsightNoteBody`, and a local
+  `writeJSON`/`writeErr`/`readJSON` trio that its own comment admitted was
+  a byte-for-byte copy of assetmanager's. `httpwire` had all three.
+- **The local `Route` struct and its `Pattern` method** — `httpwire.Route`,
+  aliased, so no mounting process had to change.
+- **`mcp/insight.go`** — `registerInsightTools` and the two hand-written
+  param structs. `dispatch.Tools` derives both from the same operations
+  file the REST table comes from.
+- **The per-field doc comments in `models/`** — moved into the blueprint's
+  `description` fields, which is where that prose lives now.
+
 ## Conventions
 
 - Four-phase `documentation/` layout — see
   [documentation/README.md](documentation/README.md).
-- Before adding new persistence code, read
-  `mwanachama-backend-assetmanager`'s `gormstore/` package and
-  `asset_manager.go`'s `AssetManager` interface as the reference shape
-  this repo's GORM layer was ported from.
-- Before touching `mcp/`, read `mwanachama-backend-agency/mcp/mcp.go`'s
-  doc comment and `mwanachama-backend-actor/CLAUDE.md`'s "MCP tools"
-  section — this repo follows that standard minus the `ManagerResolver`
-  indirection (see above for why it doesn't need one).
+- `go test ./...` (sqlite via `glebarez/sqlite`) verifies a change here.
+  The driver-specific provisioning lives in `postgres_integration_test.go`
+  (`//go:build integration`, gated on `POSTGRES_URL`, run by `make
+  test-pg`), which is **not** part of `go test ./...`.
+- **Adding a field means editing `insights.blueprint.json` and the Go type
+  together.** `TestEveryExampleFitsTheTypes` builds a manager over every
+  shipped spec, so a column with no field to hold it fails there rather
+  than dropping a value on every write. Never add a field to a domain spec
+  to get it into the module.
+- **A domain names objects; it does not re-declare them.** A domain spec
+  supplies `instance`, the name and table each role lands in, its own
+  indexes, and a default on a declared field — nothing else.
+- **Assert on `spec.RawNameFor`, never on a physical table name.** The
+  physical name is hashed; see `mwanachama-backend-shared`'s
+  [declared-domains.md](../mwanachama-backend-shared/documentation/2.%20design/declared-domains.md).
+- There are no hand-written route builders left to name: an address is an
+  entry in `insights.operations.json`.
+- This module has **no auth model**. A route needs a capability gate
+  wrapped around it by whatever mounts it.
 
 ## Code comments
 

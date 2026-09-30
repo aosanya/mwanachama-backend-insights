@@ -1,65 +1,71 @@
 package routes_test
 
 import (
+	"sort"
 	"testing"
 
 	"github.com/aosanya/mwanachama-backend-insights/routes"
 )
 
-func patterns(rts []routes.Route, prefix string) []string {
-	out := make([]string, len(rts))
-	for i, rt := range rts {
-		out[i] = rt.Pattern(prefix)
-	}
-	return out
-}
+func TestRoutesAreTheDeclaredTable(t *testing.T) {
+	im := newTestManager(t)
 
-func assertPatterns(t *testing.T, got []routes.Route, want []string) {
-	t.Helper()
-	if len(got) != len(want) {
-		t.Fatalf("got %d routes, want %d: %v", len(got), len(want), patterns(got, ""))
+	got := make([]string, 0)
+	for _, rt := range routes.Routes(im) {
+		got = append(got, rt.Pattern(""))
 	}
-	for i, p := range patterns(got, "") {
-		if p != want[i] {
-			t.Fatalf("route %d: got %q, want %q", i, p, want[i])
+	sort.Strings(got)
+
+	want := []string{
+		"GET /insights",
+		"GET /insights/{insightID}",
+		"GET /insights/{insightID}/notes",
+		"POST /insights",
+		"POST /insights/{insightID}/notes",
+	}
+	if len(got) != len(want) {
+		t.Fatalf("got %d routes, want %d: %v", len(got), len(want), got)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("route %d: got %q, want %q", i, got[i], want[i])
 		}
 	}
 }
 
-func TestInsightRoutes(t *testing.T) {
-	im := newTestManager(t)
-	rts := routes.InsightRoutes(im)
-	assertPatterns(t, rts, []string{
-		"POST /insights",
-		"GET /insights",
-		"GET /insights/{insightID}",
-	})
-}
-
-func TestInsightNoteRoutes(t *testing.T) {
-	im := newTestManager(t)
-	rts := routes.InsightNoteRoutes(im)
-	assertPatterns(t, rts, []string{
-		"POST /insights/{insightID}/notes",
-		"GET /insights/{insightID}/notes",
-	})
-}
-
-func TestRoutes_ConcatenatesBoth(t *testing.T) {
-	im := newTestManager(t)
-	all := routes.Routes(im)
-
-	want := 3 + 2 // InsightRoutes + InsightNoteRoutes
-	if len(all) != want {
-		t.Fatalf("got %d routes, want %d: %v", len(all), want, patterns(all, ""))
+func TestShapeNeedsNoManager(t *testing.T) {
+	if len(routes.Shape()) != 5 {
+		t.Fatalf("got %d routes, want 5", len(routes.Shape()))
+	}
+	for _, rt := range routes.Shape() {
+		if rt.Action == "" {
+			t.Errorf("%s %s carries no action id", rt.Method, rt.Path)
+		}
 	}
 }
 
-func TestRoute_PatternWithPrefix(t *testing.T) {
+func TestRoutePatternTakesAPrefix(t *testing.T) {
 	im := newTestManager(t)
-	rts := routes.InsightRoutes(im)
+	for _, rt := range routes.Routes(im) {
+		if rt.Method == "POST" && rt.Path == "/insights" {
+			if got := rt.Pattern("/v1/insights-svc"); got != "POST /v1/insights-svc/insights" {
+				t.Fatalf("got %q", got)
+			}
+			return
+		}
+	}
+	t.Fatal("POST /insights is not in the table")
+}
 
-	if got := rts[0].Pattern("/v1/insights-svc"); got != "POST /v1/insights-svc/insights" {
-		t.Fatalf("got %q", got)
+func TestEverySentinelTheSpecMapsIsSupplied(t *testing.T) {
+	im := newTestManager(t)
+	if _, err := routes.Build(im); err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+}
+
+func TestNothingIsAnonymous(t *testing.T) {
+	if len(routes.AnonymousActions) != 0 {
+		t.Fatalf("AnonymousActions is %v — every insights door is the mounting host's to gate", routes.AnonymousActions)
 	}
 }

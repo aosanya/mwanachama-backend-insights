@@ -3,9 +3,10 @@ module github.com/aosanya/mwanachama-backend-insights
 go 1.25.0
 
 require (
+	github.com/aosanya/mwanachama-backend-shared v0.0.0-00010101000000-000000000000
 	github.com/glebarez/sqlite v1.11.0
-	github.com/google/uuid v1.6.0
 	github.com/modelcontextprotocol/go-sdk v1.7.0
+	gorm.io/driver/postgres v1.6.3
 	gorm.io/gorm v1.31.2
 )
 
@@ -13,6 +14,11 @@ require (
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/glebarez/go-sqlite v1.21.2 // indirect
 	github.com/google/jsonschema-go v0.4.3 // indirect
+	github.com/google/uuid v1.6.0 // indirect
+	github.com/jackc/pgpassfile v1.0.0 // indirect
+	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
+	github.com/jackc/pgx/v5 v5.10.0 // indirect
+	github.com/jackc/puddle/v2 v2.2.2 // indirect
 	github.com/jinzhu/inflection v1.0.0 // indirect
 	github.com/jinzhu/now v1.1.5 // indirect
 	github.com/mattn/go-isatty v0.0.17 // indirect
@@ -30,3 +36,5 @@ require (
 	modernc.org/memory v1.5.0 // indirect
 	modernc.org/sqlite v1.23.1 // indirect
 )
+
+replace github.com/aosanya/mwanachama-backend-shared => ../mwanachama-backend-shared

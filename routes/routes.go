@@ -1,53 +1,60 @@
 package routes
 
 import (
-	"net/http"
+	"fmt"
+	"sync"
 
-	mwanachamainsights "github.com/aosanya/mwanachama-backend-insights"
+	"github.com/aosanya/mwanachama-backend-shared/dispatch"
+	"github.com/aosanya/mwanachama-backend-shared/httpwire"
+
+	insights "github.com/aosanya/mwanachama-backend-insights"
 )
 
-// Route is one address this package answers, relative to wherever the
-// mounting process prefixes it. Path uses net/http's ServeMux pattern
-// syntax ("{insightID}" etc.), so the mounting process only ever needs
-// prefix+rt.Path, never its own copy of the path text.
-type Route struct {
-	Method  string
-	Path    string
-	Handler http.HandlerFunc
+type Route = httpwire.Route
+
+var operations = sync.OnceValues(func() (*dispatch.Spec, error) {
+	return dispatch.Parse(insights.Operations())
+})
+
+var sentinels = map[string]error{
+	"ErrInsightNotFound":    insights.ErrInsightNotFound,
+	"ErrInvalidInsight":     insights.ErrInvalidInsight,
+	"ErrInvalidInsightNote": insights.ErrInvalidInsightNote,
 }
 
-// Pattern returns the http.ServeMux registration pattern for this route
-// once mounted under prefix — r.Method+" "+prefix+r.Path, net/http's own
-// "METHOD /path" syntax (Go 1.22+ mux patterns).
-func (r Route) Pattern(prefix string) string {
-	return r.Method + " " + prefix + r.Path
+var AnonymousActions []string
+
+type Mount struct {
+	Authorize dispatch.Authorizer
+	Caller    dispatch.Caller
 }
 
-// InsightRoutes is CreateInsight/GetInsight/ListInsights, addressed under
-// "/insights".
-func InsightRoutes(im mwanachamainsights.InsightManager) []Route {
-	base := "/insights"
-	return []Route{
-		{Method: http.MethodPost, Path: base, Handler: CreateInsight(im)},
-		{Method: http.MethodGet, Path: base, Handler: ListInsights(im)},
-		{Method: http.MethodGet, Path: base + "/{insightID}", Handler: GetInsight(im)},
+func Build(im insights.InsightManager) ([]Route, error) { return BuildFor(im, Mount{}) }
+
+func BuildFor(im insights.InsightManager, m Mount) ([]Route, error) {
+	s, err := operations()
+	if err != nil {
+		return nil, err
 	}
+	return dispatch.Dispatch(s, dispatch.Deps{
+		Manager: im, Errors: sentinels, Authorize: m.Authorize, Caller: m.Caller,
+	})
 }
 
-// InsightNoteRoutes is CreateInsightNote/ListInsightNotes, addressed under
-// "/insights/{insightID}/notes".
-func InsightNoteRoutes(im mwanachamainsights.InsightManager) []Route {
-	base := "/insights/{insightID}/notes"
-	return []Route{
-		{Method: http.MethodPost, Path: base, Handler: CreateInsightNote(im)},
-		{Method: http.MethodGet, Path: base, Handler: ListInsightNotes(im)},
+func Routes(im insights.InsightManager) []Route { return RoutesFor(im, Mount{}) }
+
+func RoutesFor(im insights.InsightManager, m Mount) []Route {
+	out, err := BuildFor(im, m)
+	if err != nil {
+		panic(fmt.Sprintf("insights routes: %v", err))
 	}
-}
-
-// Routes is every address this package answers today: InsightRoutes and
-// InsightNoteRoutes concatenated.
-func Routes(im mwanachamainsights.InsightManager) []Route {
-	out := InsightRoutes(im)
-	out = append(out, InsightNoteRoutes(im)...)
 	return out
+}
+
+func Shape() []Route {
+	s, err := operations()
+	if err != nil {
+		panic(fmt.Sprintf("insights routes: %v", err))
+	}
+	return dispatch.Shape(s)
 }

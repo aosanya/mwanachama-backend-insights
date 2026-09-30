@@ -79,23 +79,23 @@ func TestCreateInsight_RejectsUnknownSource(t *testing.T) {
 	}
 }
 
-func TestListInsights_FiltersByAgencyID(t *testing.T) {
+func TestListInsights_FiltersBySubjectID(t *testing.T) {
 	ctx := context.Background()
 	m := newTestManager(t)
 
-	if _, err := m.CreateInsight(ctx, mwanachamainsights.Insight{AgencyID: "agency-a", Summary: "first"}); err != nil {
+	if _, err := m.CreateInsight(ctx, mwanachamainsights.Insight{SubjectID: "subject-a", Summary: "first"}); err != nil {
 		t.Fatalf("CreateInsight: %v", err)
 	}
-	if _, err := m.CreateInsight(ctx, mwanachamainsights.Insight{AgencyID: "agency-b", Summary: "second"}); err != nil {
+	if _, err := m.CreateInsight(ctx, mwanachamainsights.Insight{SubjectID: "subject-b", Summary: "second"}); err != nil {
 		t.Fatalf("CreateInsight: %v", err)
 	}
 
-	scoped, err := m.ListInsights(ctx, mwanachamainsights.InsightFilter{AgencyID: "agency-a"})
+	scoped, err := m.ListInsights(ctx, mwanachamainsights.InsightFilter{SubjectID: "subject-a"})
 	if err != nil {
 		t.Fatalf("ListInsights scoped: %v", err)
 	}
 	if len(scoped) != 1 || scoped[0].Summary != "first" {
-		t.Fatalf("expected 1 insight for agency-a, got %+v", scoped)
+		t.Fatalf("expected 1 insight for subject-a, got %+v", scoped)
 	}
 }
 

@@ -84,3 +84,14 @@ The membership scoping in `mwanachama-wakala-api`'s `insight_scope.go` and
 session and the agency registry, neither of which this module knows about.
 That is the same boundary `mwanachama-backend-catalog` keeps: this module
 has no auth model.
+
+## A memory per subject
+
+A host that keeps notes about one subject — a person, a case, a site — writes
+them with `insight_create` carrying that subject's opaque id in `subject_id`,
+reads them back with `insight_list` narrowed by the same `subject_id`, and grows
+one with `insight_note_create`. The REST addresses are `POST /insights`,
+`GET /insights?subject_id=…` and `POST /insights/{insightID}/notes`. Nothing is
+edited or deleted; a later remark is a note. Who may read which subject's
+notes is the mount's gate, not this module's. Pinned by
+`TestInsightList_KeepsOneSubjectsMemoryApartFromAnothers` in `mcp/`.

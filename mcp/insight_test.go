@@ -147,3 +147,54 @@ func TestInsightList_FiltersByRepo(t *testing.T) {
 		t.Fatalf("expected 1 insight for repo-a, got %+v", got)
 	}
 }
+
+func TestInsightList_KeepsOneSubjectsMemoryApartFromAnothers(t *testing.T) {
+	url := newTestHTTPServer(t, newTestManager(t))
+	cs := mcpConnect(t, url)
+
+	var firstID string
+	for _, args := range []map[string]any{
+		{"subject_id": "subject-a", "summary": "prefers the evening slot"},
+		{"subject_id": "subject-b", "summary": "trained on the laser cutter"},
+		{"subject_id": "subject-a", "summary": "asked about the soldering course"},
+	} {
+		result, err := cs.CallTool(ctxT(t), &gosdkmcp.CallToolParams{Name: "insight_create", Arguments: args})
+		if err != nil || result.IsError {
+			t.Fatalf("insight_create %+v: err=%v result=%+v", args, err, result)
+		}
+		if firstID == "" {
+			got, _ := result.StructuredContent.(map[string]any)
+			firstID, _ = got["id"].(string)
+		}
+	}
+
+	result, err := cs.CallTool(ctxT(t), &gosdkmcp.CallToolParams{
+		Name:      "insight_list",
+		Arguments: map[string]any{"subject_id": "subject-a"},
+	})
+	if err != nil {
+		t.Fatalf("CallTool insight_list: %v", err)
+	}
+	got, _ := result.StructuredContent.(map[string]any)
+	items, _ := got["items"].([]any)
+	if len(items) != 2 {
+		t.Fatalf("expected 2 insights for subject-a, got %+v", got)
+	}
+	for _, it := range items {
+		row, _ := it.(map[string]any)
+		if row["subject_id"] != "subject-a" {
+			t.Fatalf("subject-a's listing carried another subject's insight: %+v", row)
+		}
+	}
+
+	if firstID == "" {
+		t.Fatal("insight_create returned no id")
+	}
+	note, err := cs.CallTool(ctxT(t), &gosdkmcp.CallToolParams{
+		Name:      "insight_note_create",
+		Arguments: map[string]any{"insightID": firstID, "text": "now prefers mornings"},
+	})
+	if err != nil || note.IsError {
+		t.Fatalf("insight_note_create: err=%v result=%+v", err, note)
+	}
+}
